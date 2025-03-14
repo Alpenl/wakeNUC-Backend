@@ -1,0 +1,2 @@
+studies_url = "https://zhjw.nuc.edu.cn/jwglxt/xsxy/xsxyqk_cxKczxAllIndex.html?doType=query&gnmkdm=N105515"
+all_studies_url = "https://zhjw.nuc.edu.cn/jwglxt/xsxy/xsxyqk_cxXsxyqkIndex.html?gnmkdm=N105515&layout=default"

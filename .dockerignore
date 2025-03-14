@@ -1,0 +1,45 @@
+# Python相关
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.Python
+*.so
+
+# 测试相关
+**/pytest
+test.py
+test_config.py
+
+# IDE相关
+**/.idea
+.vscode
+*.swp
+*.swo
+
+# 日志和缓存
+log/**log**
+*.log
+.cache
+.pytest_cache
+
+# 环境和依赖
+venv
+env
+.env
+api.env
+pip-log.txt
+
+# 版本控制
+.git
+.gitignore
+.gitattributes
+
+# 其他
+.DS_Store
+/.qiniu_pythonsdk_hostscache.json
+**/*.bak
+**/*.tmp
+**/*.temp
+
+README.md

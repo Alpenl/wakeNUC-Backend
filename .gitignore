@@ -1,0 +1,67 @@
+# Python编译文件
+**/__pycache__
+**/*.py[cod]
+**/*.so
+**/*.egg
+**/*.egg-info
+dist/
+build/
+eggs/
+parts/
+bin/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+
+# IDE配置文件
+**/.idea
+.vscode/
+*.swp
+*.swo
+*~
+
+# 测试文件和目录
+**/pytest
+test.py
+test_config.py
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 日志文件
+log/**log**
+*.log
+logs/
+
+# 环境和配置文件
+venv/
+env/
+.env
+api.env
+.python-version
+pip-log.txt
+pip-delete-this-directory.txt
+
+# 系统文件
+.DS_Store
+Thumbs.db
+*.bak
+*.tmp
+*.temp
+
+# 项目特定文件
+/.qiniu_pythonsdk_hostscache.json
+*.sqlite3
+*.db
+
+# 本地配置文件
+local_settings.py
+config.local.py
+
+# 缓存文件
+.cache/
+__pycache__/
+.pytest_cache/
