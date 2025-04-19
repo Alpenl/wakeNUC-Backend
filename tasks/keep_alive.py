@@ -12,6 +12,9 @@ url = "https://zhjw.nuc.edu.cn/jwglxt/xtgl/index_initMenu.html?jsdm=xs&_t=159998
 midnight = time(0, 0)
 morning = time(7, 25)
 
+# 上一次连接状态，True表示连接正常，False表示连接失败
+last_connection_status = True
+
 def keep_alive():
     """
     保持与教务系统的连接
@@ -19,6 +22,8 @@ def keep_alive():
     当无法连接教务系统时立即切换到下一个代理
     在凌晨0点到早上7点25分之间不发送警报，以避免干扰
     """
+    global last_connection_status
+    
     if not enableProxy:
         # 如果禁用了代理功能，则跳过保活检查
         return
@@ -34,7 +39,10 @@ def keep_alive():
         # 检查响应状态码，302表示连接正常
         if response.status_code == 302:
             # 连接成功
-            logging.info('恢复与教务系统的连接')
+            # 只有在之前连接失败的情况下才记录恢复连接的日志
+            if not last_connection_status:
+                logging.info('恢复与教务系统的连接')
+                last_connection_status = True
             
             # 设置代理状态为正常
             global_values.set_value("proxy_status_ok", True)
@@ -46,6 +54,9 @@ def keep_alive():
         
         # 设置代理状态为不正常
         global_values.set_value("proxy_status_ok", False)
+        
+        # 记录连接失败状态
+        last_connection_status = False
         
         # 切换到下一个代理 - 先存储当前代理索引
         current_index = proxy_manager.current_proxy_index
