@@ -25,6 +25,35 @@ blacklist = ['']  # 存储被拉黑用户的openid列表
 # 网络配置
 # 代理服务器(本地运行可不配置)
 proxyIp = os.getenv('PROXY_IP')  # socks代理地址
+# 是否启用代理
+enableProxy = os.getenv('ENABLE_PROXY', 'true').lower() == 'true'
+
+# 多代理配置
+# 代理列表，格式为 [{"url": "地址:端口", "type": "代理类型", "username": "用户名(可选)", "password": "密码(可选)"}]
+# 代理类型支持: socks5, http, https
+proxy_list = [
+    # 默认从环境变量中读取的代理
+    {"url": proxyIp, "type": "socks5"} if proxyIp else None
+]
+
+# 添加额外的代理
+additional_proxies = [
+    # 可以在此添加更多代理
+    # {"url": "192.168.1.100:1080", "type": "socks5"},
+    # {"url": "proxy.example.com:8080", "type": "http", "username": "user", "password": "pass"},
+]
+
+# 移除None值并合并代理列表
+proxy_list = [p for p in proxy_list if p] + additional_proxies
+
+# 代理轮询策略: 'round_robin'(默认轮询), 'random'(随机选择)
+proxy_rotation_policy = 'round_robin'
+
+# 代理请求超时时间(秒)
+proxy_request_timeout = 10
+
+# 代理失败后重试延迟(秒)
+proxy_retry_delay = 0.5
 
 # redis配置
 # redis = {
