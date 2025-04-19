@@ -86,6 +86,115 @@ def experiment():
             'msg': f"获取实验课程信息失败: {str(e)}"
         }
 
+def get_experiment_data(name, passwd):
+    """
+    获取实验课程数据，为课表提供适配的实验课程数据格式
+    
+    参数:
+    - name: 学号
+    - passwd: 密码
+    
+    返回:
+    - 处理后的实验课程列表，添加了isExperiment标记
+    """
+    try:
+        # 登录实验教学管理平台获取Cookie
+        cookies = experiment_login(name, passwd)
+        
+        # 构建请求头
+        headers = {
+            'Referer': config.student_index_url,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'zh-CN,zh;q=0.9'
+        }
+        
+        # 存储所有页面的实验课程数据
+        all_experiment_items = []
+        current_page = 1
+        total_pages = 1  # 初始化总页数为1
+        
+        # 获取当前学期信息（从第一页响应中获取）
+        current_yearterm = ""  # 默认值
+        
+        while current_page <= total_pages:
+            # 构建完整的URL，包含所有必要的查询参数
+            query_params = {
+                'page.pageNum': current_page,
+                'currTeachCourseCode': '',
+                'currWeek': '',
+                'currYearterm': current_yearterm
+            }
+            # 构建查询字符串
+            query_string = '&'.join([f"{k}={v}" for k, v in query_params.items()])
+            teachn_url = f"http://{config.lab_host}/teachn/teachnAction/index.action?{query_string}"
+            
+            teachn_headers = headers.copy()
+            teachn_headers["Referer"] = config.student_index_url
+            
+            try:
+                teachn_response = session.get(teachn_url, headers=teachn_headers, cookies=cookies)
+                
+                if teachn_response.status_code != 200:
+                    logging.error(f"[实验课程] 请求失败，状态码: {teachn_response.status_code}")
+                    continue
+                
+                teachn_content = None
+                for encoding in ['utf-8', 'gbk', 'gb2312', 'gb18030', 'latin1']:
+                    try:
+                        teachn_content = teachn_response.content.decode(encoding)
+                        break
+                    except UnicodeDecodeError:
+                        continue
+                
+                if not teachn_content:
+                    logging.error("[实验课程] 无法解码响应内容")
+                    continue
+                
+                # 解析实验课程数据
+                experiment_items = parse_experiment_from_teachn(teachn_content)
+                if experiment_items:
+                    all_experiment_items.extend(experiment_items)
+                
+                # 获取总页数和学期信息（仅在第一页时获取）
+                if current_page == 1:
+                    from lxml import etree
+                    tree = etree.HTML(teachn_content)
+                    
+                    # 查找包含页数信息的元素（在myPage div下的p标签中）
+                    page_info = tree.xpath('//div[@id="myPage"]//p/text()')
+                    if page_info:
+                        page_text = page_info[0]  # 格式为 "第 1 页 / 共 2 页"
+                        # 使用正则表达式提取总页数
+                        total_pages_match = re.search(r'共\s*(\d+)\s*页', page_text)
+                        if total_pages_match:
+                            total_pages = int(total_pages_match.group(1))
+                    
+                    # 尝试从页面获取当前学期信息
+                    yearterm_select = tree.xpath('//select[@name="currYearterm"]/option[@selected]/@value')
+                    if yearterm_select:
+                        current_yearterm = yearterm_select[0]
+                
+            except Exception as e:
+                logging.error(f"[实验课程] 处理第 {current_page} 页时发生错误: {str(e)}")
+            
+            current_page += 1
+        
+        if all_experiment_items:
+            # 合并相同课程的数据
+            experiment_items = merge_experiment_items(all_experiment_items)
+            # 添加标记，表示这是实验课程
+            for item in experiment_items:
+                item['isExperiment'] = True
+            return experiment_items
+        
+        # 如果没有找到任何课程，返回空列表
+        return []
+        
+    except Exception as e:
+        logging.error(f"[实验课程] 获取实验课程数据失败: {str(e)}")
+        return []
+
 def parse_experiment_from_teachn(html_content):
     """
     从teachnAction/index.action页面解析实验课程信息

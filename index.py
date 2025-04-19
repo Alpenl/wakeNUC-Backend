@@ -4,12 +4,24 @@ import gevent.monkey
 gevent.monkey.patch_all()
 
 # from global_config import mysql as mysql_config, blacklist, proxyIp
-from global_config import proxyIp
+from global_config import proxy_list, enableProxy
 
 import os
-# 设置全局代理，用于访问校内网络资源
-os.environ["http_proxy"] = "socks5://" + proxyIp
-os.environ["https_proxy"] = "socks5://" + proxyIp
+# 环境变量代理设置移至 proxy_manager 统一管理
+if enableProxy and proxy_list:
+    # 找出第一个socks5代理作为全局代理
+    for proxy in proxy_list:
+        if proxy.get('type', '').lower() == 'socks5' and proxy.get('url'):
+            # 设置全局代理，用于访问校内网络资源
+            os.environ["http_proxy"] = "socks5://" + proxy['url']
+            os.environ["https_proxy"] = "socks5://" + proxy['url']
+            break
+else:
+    # 如果禁用代理或代理列表为空，则清除环境变量中的代理设置
+    if "http_proxy" in os.environ:
+        del os.environ["http_proxy"]
+    if "https_proxy" in os.environ:
+        del os.environ["https_proxy"]
 
 import requests
 import json
