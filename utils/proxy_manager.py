@@ -1,11 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import itertools
 import logging
-import random
-import time
 import requests
+import os
 from typing import Dict, List, Optional, Union, Any
 
 from global_config import proxy_list, proxy_rotation_policy, proxy_request_timeout, proxy_retry_delay
@@ -13,7 +11,7 @@ from global_config import proxy_list, proxy_rotation_policy, proxy_request_timeo
 class ProxyManager:
     """
     代理管理器
-    用于管理多个代理服务器并提供代理轮询功能
+    用于管理多个代理服务器并提供简单的代理切换功能
     """
     
     def __init__(self):
@@ -29,14 +27,12 @@ class ProxyManager:
         else:
             logging.info(f"已加载 {len(self.formatted_proxies)} 个代理服务器")
         
-        # 根据轮询策略创建代理迭代器
-        if proxy_rotation_policy == 'random':
-            # 随机选择策略
-            self.proxy_iterator = self._random_proxy_generator()
-        else:
-            # 默认轮询策略
-            self.proxy_iterator = itertools.cycle(self.formatted_proxies) if self.formatted_proxies else None
-
+        # 当前使用的代理索引
+        self.current_proxy_index = 0
+        
+        # 设置系统代理（设置为第一个代理）
+        self._set_system_proxy(0)
+    
     def _format_proxies(self, proxy_configs: List[Dict[str, str]]) -> List[Dict[str, Dict[str, str]]]:
         """
         格式化代理配置，转换为requests库可用的格式
@@ -71,32 +67,86 @@ class ProxyManager:
             formatted_list.append(proxy_dict)
             
         return formatted_list
-        
-    def _random_proxy_generator(self):
-        """
-        随机代理生成器
-        
-        Returns:
-            随机选择的代理
-        """
-        while True:
-            yield random.choice(self.formatted_proxies) if self.formatted_proxies else None
     
-    def get_next_proxy(self) -> Optional[Dict[str, str]]:
+    def _set_system_proxy(self, index: int) -> bool:
         """
-        获取下一个代理服务器
+        设置系统代理环境变量
+        
+        Args:
+            index: 代理在列表中的索引
+            
+        Returns:
+            是否成功设置
+        """
+        if not self.formatted_proxies or index >= len(self.formatted_proxies):
+            # 清除系统代理
+            if "http_proxy" in os.environ:
+                del os.environ["http_proxy"]
+            if "https_proxy" in os.environ:
+                del os.environ["https_proxy"]
+            return False
+        
+        # 获取指定索引的代理
+        proxy = self.formatted_proxies[index]
+        
+        # 从代理字典中提取URL(去掉协议前缀)
+        proxy_url = proxy.get("http", "")
+        if "://" in proxy_url:
+            proxy_url = proxy_url.split("://", 1)[1]
+        
+        # 提取代理类型
+        proxy_type = "http"  # 默认类型
+        for p_type in ["http", "https", "socks5", "socks4"]:
+            if p_type in proxy.get("http", ""):
+                proxy_type = p_type
+                break
+        
+        # 设置系统代理环境变量
+        os.environ["http_proxy"] = f"{proxy_type}://{proxy_url}"
+        os.environ["https_proxy"] = f"{proxy_type}://{proxy_url}"
+        
+        # 更新当前使用的代理索引
+        self.current_proxy_index = index
+        
+        logging.info(f"已将系统代理设置为 #{index+1}: {proxy_type}://{proxy_url}")
+        return True
+    
+    def switch_to_next_proxy(self) -> bool:
+        """
+        切换到下一个代理
         
         Returns:
-            代理配置字典，如果没有可用代理则返回None
+            是否成功切换
         """
-        if not self.proxy_iterator:
-            return None
+        if not self.formatted_proxies:
+            return False
+        
+        # 计算下一个代理的索引
+        next_index = (self.current_proxy_index + 1) % len(self.formatted_proxies)
+        
+        # 设置为系统代理
+        success = self._set_system_proxy(next_index)
+        
+        return success
+    
+    def use_proxy(self, index: int) -> bool:
+        """
+        使用指定索引的代理
+        
+        Args:
+            index: 代理在列表中的索引
             
-        return next(self.proxy_iterator)
+        Returns:
+            是否成功切换
+        """
+        if not self.formatted_proxies or index >= len(self.formatted_proxies):
+            return False
+        
+        return self._set_system_proxy(index)
     
     def make_request(self, method: str, url: str, **kwargs) -> requests.Response:
         """
-        使用代理轮询发出请求，并在失败时自动重试下一个代理
+        使用当前系统代理发送请求
         
         Args:
             method: HTTP请求方法 (get, post等)
@@ -107,7 +157,7 @@ class ProxyManager:
             请求响应对象
             
         Raises:
-            requests.RequestException: 所有代理都失败时抛出最后一个异常
+            requests.RequestException: 请求失败时抛出异常
         """
         # 如果没有代理，直接发出请求
         if not self.formatted_proxies:
@@ -116,61 +166,19 @@ class ProxyManager:
         # 设置超时时间，避免请求卡死
         timeout = kwargs.pop('timeout', proxy_request_timeout)
         
-        last_exception = None
-        tried_proxies = set()
+        # 获取当前代理
+        current_proxy = self.formatted_proxies[self.current_proxy_index]
         
-        # 尝试所有代理，直到请求成功或所有代理都失败
-        while len(tried_proxies) < len(self.formatted_proxies):
-            current_proxy = self.get_next_proxy()
-            
-            # 跟踪已尝试过的代理
-            proxy_key = str(current_proxy)
-            if proxy_key in tried_proxies:
-                continue
-            tried_proxies.add(proxy_key)
-            
-            try:
-                logging.debug(f"正在使用代理 {current_proxy} 访问 {url}")
-                
-                # 发出请求
-                response = requests.request(
-                    method, 
-                    url, 
-                    proxies=current_proxy, 
-                    timeout=timeout, 
-                    **kwargs
-                )
-                
-                # 检查响应状态
-                response.raise_for_status()
-                
-                logging.debug(f"使用代理 {current_proxy} 成功访问 {url}")
-                return response
-                
-            except (
-                requests.exceptions.ProxyError,
-                requests.exceptions.ConnectTimeout,
-                requests.exceptions.SSLError,
-                requests.exceptions.ConnectionError,
-                requests.exceptions.ReadTimeout,
-                requests.exceptions.Timeout,
-                requests.exceptions.HTTPError
-            ) as e:
-                # 记录代理失败
-                logging.warning(f"代理 {current_proxy} 失败: {type(e).__name__} - {str(e)}")
-                last_exception = e
-                
-                # 短暂延迟后尝试下一个代理
-                if proxy_retry_delay > 0:
-                    time.sleep(proxy_retry_delay)
+        # 发送请求
+        response = requests.request(
+            method, 
+            url, 
+            proxies=current_proxy, 
+            timeout=timeout, 
+            **kwargs
+        )
         
-        # 所有代理都失败，抛出最后一个异常
-        if last_exception:
-            raise last_exception
-            
-        # 如果没有代理或所有代理都失败但没有异常，直接使用无代理请求
-        logging.warning("所有代理均已失败，尝试直接连接")
-        return requests.request(method, url, **kwargs)
+        return response
     
     def get(self, url: str, **kwargs) -> requests.Response:
         """
