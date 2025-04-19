@@ -108,7 +108,8 @@ class ProxyManager:
         # 更新当前使用的代理索引
         self.current_proxy_index = index
         
-        logging.info(f"已将系统代理设置为 #{index+1}: {proxy_type}://{proxy_url}")
+        # 由keep_alive.py处理代理切换的日志，这里不再单独记录
+        # logging.info(f"已将系统代理设置为 #{index+1}: {proxy_type}://{proxy_url}")
         return True
     
     def switch_to_next_proxy(self) -> bool:
