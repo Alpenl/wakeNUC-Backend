@@ -11,18 +11,22 @@ from utils.gol import global_values
 url = "https://zhjw.nuc.edu.cn/jwglxt/xtgl/index_initMenu.html?jsdm=xs&_t=1599980405581&ticket=ST-206697-Sd004wk15bKfNUsbirLI-zfsoft.com"
 midnight = time(0, 0)
 morning = time(7, 25)
+quiet_start = time(1, 0)   # 夜间安静期开始时间，凌晨1点
+quiet_end = time(5, 30)    # 夜间安静期结束时间，早上5点半
 
 # 上一次连接状态，True表示连接正常，False表示连接失败
 last_connection_status = True
+# 追踪上一次日志记录时间
+last_log_time = None
 
 def keep_alive():
     """
     保持与教务系统的连接
     
     当无法连接教务系统时立即切换到下一个代理
-    在凌晨0点到早上7点25分之间不发送警报，以避免干扰
+    在凌晨1点到早上5点30分之间不记录代理切换日志，以减少冗余日志
     """
-    global last_connection_status
+    global last_connection_status, last_log_time
     
     if not enableProxy:
         # 如果禁用了代理功能，则跳过保活检查
@@ -67,9 +71,13 @@ def keep_alive():
         proxy_url = proxy_list[next_index].get('url', '')
         proxy_type = proxy_list[next_index].get('type', 'http')
         
-        # 记录简化的错误信息
-        logging.warning(f'无法连接至教务系统! 错误: {error_type}, 已切换代理至 #{next_index+1}: {proxy_type}://{proxy_url}')
-        logging.debug(f'错误详情: {str(e)}')
+        # 检查当前时间，决定是否记录日志
+        current_time = datetime.now().time()
+        # 如果不在安静期内，或者是首次记录日志，则正常记录
+        if not (quiet_start <= current_time <= quiet_end) or last_log_time is None:
+            logging.warning(f'无法连接至教务系统! 错误: {error_type}, 已切换代理至 #{next_index+1}: {proxy_type}://{proxy_url}')
+            logging.debug(f'错误详情: {str(e)}')
+            last_log_time = datetime.now()
 
 
 scheduler.add_job(keep_alive, 'interval', seconds=15, next_run_time=datetime.now())
